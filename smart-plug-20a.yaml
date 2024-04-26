@@ -1,8 +1,6 @@
 esphome:
   name: smart-plug-20a
-  friendly_name: Smart Plug 20A
-  #platformio_options:
-    #board_build.f_cpu: 60000000L
+  friendly_name: Smart Plug 20A #Elivco
   on_boot:
     priority: 600
     then:       
@@ -40,17 +38,17 @@ api:
 ota:
   password: !secret hotspot_pw
 
-wifi:
-  id: iptime
+wifi:  
   ssid: !secret wifi_ssid
   password: !secret wifi_password  
   power_save_mode: HIGH
   fast_connect: true
   manual_ip: 
-   static_ip: 192.168.1.111
-   gateway: 192.168.1.1
-   subnet: 255.255.255.0
-
+   static_ip: 192.168.x.x     #Your IP
+   gateway: 192.168.x.x      #Your gateway
+   subnet: 255.255.255.0     
+   dns1: x.x.x.x     #Your dns1
+   dns2: x.x.x.x     #Your dns2
   # Enable fallback hotspot in case wifi connection fails
   ap:
     ssid: "Smart-Plug-ac Fallback Hotspot"
