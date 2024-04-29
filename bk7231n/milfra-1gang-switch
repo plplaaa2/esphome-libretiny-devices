@@ -28,8 +28,8 @@ wifi:
   power_save_mode: HIGH
   #fast_connect: True
   #manual_ip: 
-   #static_ip: $s_ip #192.168.1.113
-   #gateway: 192.168.1.1
+   #static_ip: 192.168.x.x
+   #gateway: 192.168.x.x
    #subnet: 255.255.255.0  
 
   # Enable fallback hotspot in case wifi connection fails
