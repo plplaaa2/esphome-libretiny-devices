@@ -8,3 +8,4 @@ Tuya convert to the esphome
 **BK7231N**
 
  Tuay Wifi Smart Plug 20A (Elivco EU socket)
+ Tuya Milfra 1, 2, 3Gang Wall Switch (no neutral)
