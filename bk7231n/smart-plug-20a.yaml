@@ -1,26 +1,21 @@
+substitutions:
+  voltage_divider: "801.10"
+  current_resistor: "0.001"
+  current_multiply: "0.43"
+
 esphome:
   name: smart-plug-20a
-  friendly_name: Smart Plug 20A #Elivco
+  friendly_name: Smart Plug    # ELIVCO
+  #platformio_options:
+    #board_build.f_cpu: 60000000L
   on_boot:
     priority: 600
     then:       
       - lock.unlock: child_lock
-      - if: # Relay Status OFF
-         condition:
-           - switch.is_off: relay
-         then:
-           - light.turn_off: power_led
-      - if: # Relay Status OFF
-         condition:
-           - switch.is_on: relay
-         then:
-           - light.turn_on: 
-               id: power_led
-               brightness: 90%
+      - script.execute: led_restore
       - number.set:
           id: set_num
           value: 5
-      - script.execute: power_save
           
 bk72xx:
   board: generic-bk7231n-qfn32-tuya
@@ -44,17 +39,21 @@ wifi:
   power_save_mode: HIGH
   fast_connect: true
   manual_ip: 
-   static_ip: 192.168.x.x     #Your IP
-   gateway: 192.168.x.x      #Your gateway
-   subnet: 255.255.255.0     
-   dns1: x.x.x.x     #Your dns1
-   dns2: x.x.x.x     #Your dns2
+   static_ip: 'your ip'
+   gateway: 'your gate way'
+   subnet: 255.255.255.0
+   dns1: 'your dns1'
+   dns2: 'your dns2'
+
   # Enable fallback hotspot in case wifi connection fails
   ap:
-    ssid: "Smart-Plug-ac Fallback Hotspot"
+    ssid: "Smart-Plug Fallback Hotspot"
     password: !secret hotspot_pw
 
-#captive_portal:
+captive_portal:
+web_server:
+
+
 time:
   - platform: homeassistant
     id: homeassistant_time
@@ -69,37 +68,42 @@ binary_sensor:
     on_release:
       then:
         - if:
-              condition:
-                for:
-                  time: 60s
-                  condition:
-                    - binary_sensor.is_off: c_status
-              then:
-                - button.press: re_start
-  # Button on the front is pressed and then toggle relay
+            condition:
+              for:
+                time: 120s
+                condition:
+                  - binary_sensor.is_off: c_status
+            then:
+              - button.press: re_start
   - platform: template
-    id: binary_save
-    name: Power Save Watchdog
+    id: warning
+    name: Overload Warning
+    device_class: problem
     lambda: |-
-      if (id(power_save).is_running()){
-      return true;
-      } else {
-      return false;
-      }
-  
+     if ((id(current).state >= 18) or (id(in_temp).state >= 70)) {
+     return true;
+     } else {
+     return false;
+     }
+    on_press:
+      then:
+        - delay: 5s
+        - lambda: id(warning).publish_state(false);
+
+      
+  # Button on the front is pressed and then toggle relay     
   - platform: gpio
     device_class: power
-    internal: True    
+    internal: True
     pin:
       number: 10
       mode: INPUT_PULLDOWN
-      inverted: True  
+      inverted: True
     name: Button # Name to make button visible in HA
     on_click:      
       - min_length: 50ms
-        max_length: 500ms
-        then:
-          - script.execute: power_save
+        max_length: 1000ms
+        then:          
           - if: 
               condition:
                - lock.is_unlocked: child_lock
@@ -107,41 +111,41 @@ binary_sensor:
                - switch.toggle: relay
               else:
                 - repeat:
-                    count: 3
+                    count: 2
                     then:
                       - light.turn_on: wifi_led
                       - delay: 0.5s
                       - light.turn_off: wifi_led
-                      - delay: 0.5s      
+                      - delay: 0.5s
+                      - script.execute: led_restore
+
     on_multi_click:
       - timing:
         - ON for at least 5s   
         - OFF for at least 0.5s     
-        then:          
+        then:
           - if: # if lock is lock, do unlock
               condition:
                 lock.is_locked: child_lock
-              then:                  
+              then:
                   - lock.unlock: child_lock
                   - logger.log: "unlock"
+                  - light.turn_on: wifi_led
+                  - delay: 1.5s
+                  - light.turn_off: power_led          
+                  - script.execute: led_restore              
+
+              else: # if lock is unlock, do lock
+                  - lock.lock: child_lock
+                  - logger.log: "locked"
                   - repeat:
                       count: 2
                       then:
                         - light.turn_on: wifi_led
                         - delay: 0.5s
                         - light.turn_off: wifi_led
-                        - delay: 0.5s      
-
-              else: # if lock is unlock, do lock                  
-                  - lock.lock: child_lock
-                  - logger.log: "locked"
-                  - repeat:
-                      count: 3
-                      then:
-                        - light.turn_on: wifi_led
-                        - delay: 0.5s
-                        - light.turn_off: wifi_led
                         - delay: 0.5s 
+                  - script.execute: led_restore
       - timing:
         - ON for at least 10s   
         - OFF for at least 0.5s
@@ -165,11 +169,46 @@ sensor:
     entity_category: "diagnostic"
     device_class: ""
 
+  - platform: total_daily_energy
+    name: 'Total Daily Energy'
+    power_id: power
+    unit_of_measurement: 'kWh'
+    state_class: total_increasing
+    device_class: energy
+    accuracy_decimals: 3
+    icon: mdi:counter
+    filters:
+      # Multiplication factor from W to kW is 0.001
+      - multiply: 0.001
+
+  - platform: template
+    name: "Power Factor"
+    unit_of_measurement: "%"
+    accuracy_decimals: 2
+    lambda: return id(power).state / (id(current).state * id(voltage).state);
+    filters:
+      multiply: 100
+
   - platform: internal_temperature
     name: "Internal Temperature"
+    id: in_temp
+    on_value:
+      then:
+        - if:
+            condition:
+              and:
+                - switch.is_on: switch_olp
+                - lambda: return (id(in_temp).state >= 70);
+            then:
+              - logger.log: "Overload Temp"
+              - switch.turn_off: relay
+              - lambda: id(warning).publish_state(true);
+
     
   - platform: hlw8012
     model: BL0937
+    current_resistor: ${current_resistor}
+    voltage_divider: ${voltage_divider}
     sel_pin:
       number: 24
       inverted: true
@@ -183,19 +222,10 @@ sensor:
       name: "Current"
       id: current
       icon: mdi:current-ac
-      filters:        
-        - lambda: return x * 0.443548;      
-      unit_of_measurement: A
-    voltage:
-      name: "Voltage"
-      id: voltage
-      filters:        
-        - lambda: return x / 3;
-    power:
-      name: "Power"
-      id: power
       filters:
-        - lambda: return x / 3;
+        - multiply: ${current_multiply}
+        #- lambda: return x * 0.443548;
+      unit_of_measurement: A
       on_value:
         - if:
             condition:
@@ -204,19 +234,23 @@ sensor:
                 condition:
                   and:
                     - switch.is_on: switch_olp
-                    - lambda: return (id(power).state >= 4000);
+                    - lambda: return (id(current).state >= 20);
             then:
+              - logger.log: "Overload 20A"
               - switch.turn_off: relay
+              - lambda: id(warning).publish_state(true);
         - if:
             condition:
               for:
-                time: 5min
+                time: 2min
                 condition:
                   and:
                     - switch.is_on: switch_olp
-                    - lambda: return (id(power).state >= 3500 );
+                    - lambda: return (id(current).state >= 18);
             then:
+              - logger.log: "Overload 18A"
               - switch.turn_off: relay
+              - lambda: id(warning).publish_state(true);
         - if:
             condition:
               for:
@@ -224,30 +258,24 @@ sensor:
                 condition:
                   and:
                     - switch.is_on: switch_olp
-                    - lambda: return (id(power).state >= 3000 );
+                    - lambda: return (id(current).state >= 16 );
             then:
+              - logger.log: "Overload 16A"
               - switch.turn_off: relay
-    update_interval: 5s 
-    
-  - platform: template
-    name: "Power Factor"
-    unit_of_measurement: "%"
-    accuracy_decimals: 2
-    lambda: return id(power).state / (id(current).state * id(voltage).state);
-    filters:
-      multiply: 100
-    
-  - platform: total_daily_energy
-    name: 'Total Daily Energy'
-    power_id: power
-    unit_of_measurement: 'kWh'
-    state_class: total_increasing
-    device_class: energy
-    accuracy_decimals: 3
-    icon: mdi:counter
-    filters:
-      # Multiplication factor from W to kW is 0.001
-      - multiply: 0.001
+              - lambda: id(warning).publish_state(true);
+        - script.execute: power_save
+    voltage:
+      name: "Voltage"
+      id: voltage
+      #filters:        
+       # - lambda: return x / 3;
+    power:
+      name: "Power"
+      id: power
+      accuracy_decimals: 2
+      #filters:
+        #- lambda: return x / 3;      
+    update_interval: 3s 
 
 number:
   - platform: template
@@ -259,9 +287,6 @@ number:
     max_value: 100
     unit_of_measurement: W
     step: 5
-    on_value:
-      then:
-        - script.execute: power_save
 
 text_sensor:
   - platform: version
@@ -278,13 +303,13 @@ light:
     id: wifi_led
     pin:  
       number: 8
-      inverted: true    
+      inverted: true
     internal: true
 
   - platform: binary
     name: "Power LED"
     id: power_led
-    output: led_out    
+    output: led_out
     internal: true
 
 output:
@@ -312,10 +337,7 @@ switch:
     icon: mdi:power-socket-de
     restore_mode: RESTORE_DEFAULT_OFF
     on_turn_on:
-      - light.turn_on: 
-          id: power_led
-          brightness: 90%
-      - script.execute: power_save
+      - light.turn_on: power_led          
     on_turn_off:
       - light.turn_off: power_led
   # Stanby Power Save
@@ -325,10 +347,6 @@ switch:
     icon: mdi:toggle-switch
     restore_mode: RESTORE_DEFAULT_OFF
     optimistic: true
-    on_turn_on:    
-      - script.execute: power_save
-    on_turn_off: 
-      - script.stop: power_save
     # Overload Protect
   - platform: template
     name: "OverLoad Protection"    
@@ -347,14 +365,24 @@ script:
   - id: power_save
     mode: restart
     then:
-      if:
-        condition:
-          for:
-            time: 5min
-            condition:            
-              and:              
-                - switch.is_on: relay
-                - switch.is_on: switch_save
-                - lambda: return (id(power).state <= id(set_num).state );
-        then: 
-          - switch.turn_off: relay
+      - if:
+          condition:
+            for:
+              time: 300s
+              condition:
+                and:              
+                  - switch.is_on: relay
+                  - switch.is_on: switch_save
+                  - lambda: return (id(power).state <= id(set_num).state );
+          then: 
+            - switch.turn_off: relay
+  - id: led_restore
+    mode: restart
+    then:
+      - if: # Relay Status OFF
+           condition:
+             - switch.is_off: relay
+           then:
+             - light.turn_off: power_led
+           else:
+             - light.turn_on: power_led
