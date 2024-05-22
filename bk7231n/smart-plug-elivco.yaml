@@ -4,8 +4,8 @@ substitutions:
   current_multiply: "0.43"
 
 esphome:
-  name: smart-plug-20a
-  friendly_name: Smart Plug    # ELIVCO
+  name: smart-plug-elivco
+  friendly_name: Smart Plug Elivco
   #platformio_options:
     #board_build.f_cpu: 60000000L
   on_boot:
