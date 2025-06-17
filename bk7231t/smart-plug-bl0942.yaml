@@ -10,8 +10,8 @@ esphome:
   on_boot:
     priority: 600
     then:       
-      - lock.unlock: child_lock      
-      - if: # Relay Status OFF
+      - lock.unlock: child_lock      # Unlock child lock on boot
+      - if:                          # Set LED state based on relay status
          condition:
            - switch.is_off: relay
          then:
@@ -22,10 +22,7 @@ esphome:
            - light.turn_on: 
               id: power_led
               brightness: 70%
-      - number.set: 
-          id: set_num
-          value: 5
-      - script.execute: power_save
+      - script.execute: power_save  # Start power saving logic
 bk72xx:
   board: generic-bk7231t-qfn32-tuya  
   framework:
@@ -68,6 +65,8 @@ wifi:
            - light.turn_off: power_led
          else:
            - light.turn_on: power_led
+              id: power_led
+              brightness: 100%
            - delay: 5s    
            - light.turn_on: 
               id: power_led
@@ -208,13 +207,14 @@ sensor:
     filters:
       # Multiplication factor from W to kW is 0.001
       - multiply: 0.001
-      
+# Internal temperature sensor (scaled by 4x)
   - platform: internal_temperature
     name: "Internal Temperature"
     id: in_temp
     filters:
       - multiply: 4
     on_value:
+# Over-temperature protection: 70°C
       then:
         - if:
             condition:
@@ -226,6 +226,7 @@ sensor:
               - switch.turn_off: relay
               - lambda: id(warning).publish_state(true);     
 
+# Power monitoring sensor using BL0942
   - platform: bl0942
     uart_id: uart_bus
     voltage:
@@ -292,9 +293,11 @@ number:
     name: "Set Stanby W"
     id: set_num
     optimistic: true
+    restore_mode: true
     icon: mdi:numeric
     min_value: 0
     max_value: 100
+    initial_value: 5
     unit_of_measurement: W
     step: 5
     on_value:
