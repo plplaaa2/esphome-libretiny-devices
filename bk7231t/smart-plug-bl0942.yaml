@@ -1,14 +1,12 @@
 substitutions:  
-  device_name: smart-plug-ind
-  friendly_name: Smart Plug Ind
+  device_name: smart-plug-bl0942
+  friendly_name: Smart Plug bl0942
   s_ip: 192.168.x.x
 
 
 esphome:
   name: $device_name
   friendly_name: $friendly_name
-  #platformio_options:
-    #board_build.f_cpu: 60000000L
   on_boot:
     priority: 600
     then:       
@@ -81,13 +79,6 @@ wifi:
     password: !secret hotspot_pw
 
 captive_portal:
-web_server:
-  
-
-#mqtt:
-  #broker: 192.168.1.102
-  #username: !secret mqtt_id
-  #password: !secret mqtt_password
 
 uart:
   id: uart_bus
@@ -115,14 +106,15 @@ binary_sensor:
               then:
                 - button.press: re_start
   - platform: template
-    id: binary_save
-    name: Power Save Watchdog
+    id: warning
+    name: 'Overload Warning'
+    device_class: problem
     lambda: |-
-      if (id(power_save).is_running()){
-      return true;
-      } else {
-      return false;
-      }
+     if ((id(current).state >= 18) or (id(in_temp).state >= 70)){
+     return true;
+     } else {
+     return false;
+     }
   
   # Button on the front is pressed and then toggle relay           
   - platform: gpio
@@ -139,29 +131,20 @@ binary_sensor:
         then:          
           - if: 
               condition:
-               - lock.is_unlocked: child_lock
+                and:
+                  - lock.is_unlocked: child_lock
+                  - binary_sensor.is_off: warning  
               then: 
                - switch.toggle: relay
               else:
                 - repeat:
-                    count: 3
+                    count: 2
                     then:
                       - light.turn_on: power_led
                       - delay: 0.5s
                       - light.turn_off: power_led
                       - delay: 0.5s      
-          - if: # Relay Status OFF
-                condition:
-                  - switch.is_off: relay
-                then:
-                  - light.turn_off: power_led
-                else:
-                - light.turn_on: power_led
-                - delay: 5s    
-                - light.turn_on: 
-                    id: power_led
-                    brightness: 70%
-          - script.execute: power_save
+                      - script.execute: led_restore
 
     on_multi_click:
       - timing:
@@ -174,46 +157,28 @@ binary_sensor:
               then:                  
                   - lock.unlock: child_lock
                   - logger.log: "unlock"
+                  - light.turn_on: power_led
+                  - delay: 1.5s
+                  - light.turn_off: power_led
+                  - script.execute: led_restore
+                  
+              else: # if lock is unlock, do lock                  
+                  - lock.lock: child_lock
+                  - logger.log: "locked"
                   - repeat:
                       count: 2
                       then:
                         - light.turn_on: power_led
                         - delay: 0.5s
                         - light.turn_off: power_led
-                        - delay: 0.5s      
-                  - if: # Relay Status OFF
-                      condition:
-                        - switch.is_on: relay
-                      then:
-                        - light.turn_on: power_led
-                        - delay: 5s    
-                        - light.turn_on: 
-                            id: power_led
-                            brightness: 70%
-              else: # if lock is unlock, do lock                  
-                  - lock.lock: child_lock
-                  - logger.log: "locked"
-                  - repeat:
-                      count: 3
-                      then:
-                        - light.turn_on: power_led
-                        - delay: 0.5s
-                        - light.turn_off: power_led
                         - delay: 0.5s 
-                  - if: # Relay Status OFF
-                      condition:
-                        - switch.is_on: relay
-                      then:
-                        - light.turn_on: power_led
-                        - delay: 5s    
-                        - light.turn_on: 
-                            id: power_led
-                            brightness: 70%
+                  - script.execute: led_restore
+                 
       - timing:
         - ON for at least 10s   
         - OFF for at least 0.5s
         then:
-          - switch.turn_on: s_safe
+          - button.press: re_start
 sensor:
   - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
     name: "WiFi Signal dB"
@@ -246,60 +211,80 @@ sensor:
       
   - platform: internal_temperature
     name: "Internal Temperature"
+    id: in_temp
+    filters:
+      - multiply: 4
+    on_value:
+      then:
+        - if:
+            condition:
+              and:
+                - switch.is_on: switch_olp
+                - lambda: return ((id(in_temp).state) >= 70);
+            then:
+              - logger.log: "Overload Temp"
+              - switch.turn_off: relay
+              - lambda: id(warning).publish_state(true);     
 
   - platform: bl0942
     uart_id: uart_bus
     voltage:
       name: 'Voltage'
+      id: voltage
+      accuracy_decimals: 1
     current:
       name: 'Current'
-    power:
-      name: 'Power'
-      id: power
-      accuracy_decimals: 2
-      on_value:              
+      id: current
+      accuracy_decimals: 1
+      on_value:
         - if:
-            condition:              
+            condition:
               for:
                 time: 15ms
                 condition:
                   and:
                     - switch.is_on: switch_olp
-                    - lambda: return (id(power).state >= 4000);
+                    - lambda: return (id(current).state >= 20);
             then:
-              - switch.turn_off: relay      
+              - logger.log: "Overload 20A"
+              - switch.turn_off: relay
+              - lambda: id(warning).publish_state(true);
         - if:
-            condition:              
+            condition:
               for:
-                time: 5min
+                time: 2min
                 condition:
                   and:
                     - switch.is_on: switch_olp
-                    - lambda: return (id(power).state >= 3500 );
+                    - lambda: return (id(current).state >= 18);
             then:
+              - logger.log: "Overload 18A"
               - switch.turn_off: relay
+              - lambda: id(warning).publish_state(true);
         - if:
-            condition:              
+            condition:
               for:
                 time: 60min
                 condition:
                   and:
                     - switch.is_on: switch_olp
-                    - lambda: return (id(power).state >= 3000 );
+                    - lambda: return (id(current).state >= 16 );
             then:
-              - switch.turn_off: relay      
-        - if:
-            condition:
-              and:
-                - switch.is_on: relay
-                - binary_sensor.is_off: binary_save
-            then:
-              - script.execute: power_save
+              - logger.log: "Overload 16A"
+              - switch.turn_off: relay
+              - lambda: id(warning).publish_state(true);
+        - script.execute: power_save     
     energy:
       name: 'Energy'
+    power:
+      name: 'Power'
+      id: power
+      accuracy_decimals: 1
+      filters:
     frequency:
       name: "Frequency"
-      accuracy_decimals: 2
+      accuracy_decimals: 1
+    line_frequency: 60Hz
     update_interval: 3s
 
 number:
@@ -322,11 +307,9 @@ text_sensor:
   - platform: wifi_info
     ip_address:
      name: Device IP Address
-    mac_address:
-      name: ESP Mac Wifi Address
-
+     
 light:
-  - platform: binary
+  - platform: status_led    
     name: "Power LED"
     id: power_led
     output: led_out
@@ -339,20 +322,17 @@ output:
     pin: 
       number: 6
       inverted: true
-    frequency: 120Hz
 
 button:    
   - platform: restart
     name: "Restart"
     id: re_start
     entity_category: diagnostic
-  - platform: wake_on_lan
-    name: "Start the Server"
-    id: wake_up
-    target_mac_address: !secret server
-    on_press:
+  - platform: template
+    name: "Overload Reset"
+    on_press: 
       then:
-        - logger.log: "Wake UP the Server"
+        - lambda: id(warning).publish_state(false);
 
 switch:
 # Relay itself
@@ -413,4 +393,18 @@ script:
                - lambda: return (id(power).state <= id(set_num).state );
           then: 
             - switch.turn_off: relay
+  - id: led_restore
+    mode: restart
+    then:
+      - if: # Relay Status OFF
+           condition:
+             - switch.is_off: relay
+           then:
+             - light.turn_off: power_led
+           else:
+             - light.turn_on: power_led
+             - delay : 5s
+             - light.turn_on: 
+                 id: power_led
+                 brightness: 70%
 
