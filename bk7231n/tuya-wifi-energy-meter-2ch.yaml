@@ -1,6 +1,6 @@
 substitutions:
   name: "energy-meter-2ch"
-  comment: Energy Meter 2ch  123  
+  comment: Tuya Energy Meter 2ch
   s_led: GPIO4
   update: 60s
 
