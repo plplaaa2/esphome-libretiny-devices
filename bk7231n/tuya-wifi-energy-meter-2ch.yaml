@@ -1,0 +1,302 @@
+substitutions:
+  name: "energy-meter-2ch"
+  comment: Energy Meter 2ch  123  
+  s_led: GPIO4
+  update: 60s
+
+esphome:
+  name: ${name}
+  comment: ${comment}
+  project:
+    name: "esphome-craft.wifi"
+    version: "tuya.energy-meter.2ch"
+  on_boot: 
+    then:
+      - lambda: |-
+          auto call = id(interval).make_call();
+          call.set_value(id(interval_time));
+          call.perform();
+bk72xx:
+  board: cb2s
+
+# Enable logging
+logger:
+  level: DEBUG
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: HIGH
+  fast_connect: True
+  #output_power: 8.5dB
+  
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "${name} Hotspot"
+
+captive_portal:
+
+tuya:  
+  time_id: kr_time
+
+uart:
+  rx_pin: RX1
+  tx_pin: TX1
+  baud_rate: 9600
+
+time:
+  - platform: sntp
+    id: kr_time
+    timezone: Asia/Seoul
+
+globals:
+  - id: interval_time
+    type: float
+    initial_value: '3'
+    restore_value: True
+
+text_sensor:
+  - platform: version
+    name: "Esphome Version"
+  - platform: wifi_info
+    ip_address:
+     name: "ESP IP Address"
+  - platform: uptime
+    name: Uptime
+    format:
+      separator: " "
+      days: "d"
+      hours: "h"
+      minutes: "m"
+
+  - platform: "tuya"
+    name: "Direction A"
+    sensor_datapoint: 102
+    icon: mdi:directions
+    filters:
+      - map:
+        - "0 -> Forward"
+        - "1 -> Reverse"
+
+  - platform: "tuya"
+    name: "Direction B"
+    sensor_datapoint: 104
+    icon: mdi:directions
+    filters:
+      - map:
+        - "0 -> Forward"
+        - "1 -> Reverse"
+
+binary_sensor:
+  - platform: status
+    name: "Connection Status"
+
+sensor:
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    internal: true
+    entity_category: "diagnostic"
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "Signal %"
+    entity_category: "diagnostic"
+    device_class: ""
+    icon: mdi:wifi
+
+  - platform: internal_temperature
+    name: 'Internal temperature'
+
+  - platform: total_daily_energy
+    name: 'Total Daily Energy A'    
+    power_id: power_a
+    unit_of_measurement: 'kWh'
+    state_class: total_increasing
+    device_class: energy
+    accuracy_decimals: 2    
+    icon: mdi:counter
+    filters:
+      # Multiplication factor from W to kW is 0.001
+      - lambda: return x / 1000;
+  - platform: total_daily_energy
+    name: 'Total Daily Energy B'    
+    power_id: power_b
+    unit_of_measurement: 'kWh'
+    state_class: total_increasing
+    device_class: energy
+    accuracy_decimals: 2
+    icon: mdi:counter    
+    filters:
+      # Multiplication factor from W to kW is 0.001
+      - lambda: return x / 1000;
+
+  - platform: tuya
+    sensor_datapoint: 1
+    id: energy_a
+    name: "Total Forward Energy"
+    unit_of_measurement: 'kWh'
+    accuracy_decimals: 1
+    device_class: energy
+    filters: 
+      - lambda: return x / 1000;
+  - platform: tuya
+    sensor_datapoint: 2
+    id: energy_b
+    name: "Total Reverse Energy"
+    unit_of_measurement: 'kWh'
+    accuracy_decimals: 1
+    device_class: energy
+    filters: 
+      - lambda: return x / 1000;
+  - platform: tuya
+    sensor_datapoint: 101 
+    id: power_a
+    name: "Total Forward Power A"
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+    device_class: power
+    filters: 
+      - lambda: return x / 10;
+  - platform: tuya
+    sensor_datapoint: 105
+    id: power_b
+    name: "Total Reverse Power B"
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+    device_class: power
+    filters: 
+      - lambda: return x / 10;
+  - platform: tuya
+    sensor_datapoint: 106
+    id: forward_energy_a
+    name: "Forward Energy A"
+    unit_of_measurement: 'kWh'
+    accuracy_decimals: 1
+    device_class: energy
+    filters: 
+      - lambda: return x / 1000;    
+  - platform: tuya
+    sensor_datapoint: 107
+    id: reverse_energy_a    
+    name: "Reverse Energy A"
+    unit_of_measurement: 'kWh'
+    accuracy_decimals: 1
+    device_class: energy
+    filters: 
+      - lambda: return x / 1000;
+  - platform: tuya
+    sensor_datapoint: 108
+    id: forward_energy_b
+    name: "Forward Energy B"
+    unit_of_measurement: 'kWh'
+    accuracy_decimals: 1
+    device_class: energy
+    filters: 
+      - lambda: return x / 1000;
+  - platform: tuya
+    sensor_datapoint: 109
+    id: reverse_energy_b
+    name: "Reverse Energy B"
+    unit_of_measurement: 'kWh'
+    accuracy_decimals: 1
+    device_class: energy
+    filters: 
+      - lambda: return x / 1000;
+  - platform: tuya
+    sensor_datapoint: 110
+    id: power_factor_b
+    name: "Power Factor A"
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    device_class: power_factor
+  - platform: tuya
+    sensor_datapoint: 111
+    id: frequency
+    name: "Frequency"
+    unit_of_measurement: "Hz"
+    accuracy_decimals: 1
+    device_class: frequency
+    filters: 
+      - lambda: return (x / 100) + 0.9;
+  - platform: tuya
+    sensor_datapoint: 112
+    id: voltage
+    name: "Voltage"
+    unit_of_measurement: "V"
+    accuracy_decimals: 1
+    device_class: voltage
+    filters: 
+      - lambda: return x / 10;
+  - platform: tuya
+    sensor_datapoint: 113
+    id: current_a
+    name: "Current A"
+    unit_of_measurement: "A"
+    accuracy_decimals: 1
+    device_class: current
+    filters: 
+      - lambda: return x / 1000;          
+  - platform: tuya
+    sensor_datapoint: 114
+    id: current_b
+    name: "Current B"
+    unit_of_measurement: "A"
+    accuracy_decimals: 1
+    device_class: current
+    filters: 
+      - lambda: return x / 1000;
+  - platform: tuya
+    sensor_datapoint: 115
+    id: power_ab
+    name: "Total Power A-B"
+    unit_of_measurement: "W"
+    accuracy_decimals: 1
+    device_class: power
+    filters: 
+      - lambda: return x / 10;
+  - platform: tuya
+    sensor_datapoint: 121
+    id: power_factor_a
+    name: "Power Factor B"
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    device_class: power_factor
+
+number:
+  - platform: tuya
+    number_datapoint: 129
+    id: interval
+    name: "Update Interval"
+    min_value: 1
+    max_value: 10
+    step: 1
+    mode: box
+    unit_of_measurement: "s"
+    entity_category: config
+    on_value: 
+      then:
+        - globals.set: 
+            id: interval_time
+            value: !lambda return x;
+
+button:    
+  - platform: restart
+    name: "Restart"
+    id: re_start
+    entity_category: diagnostic 
+
+  - platform: factory_reset    
+    name: "Factory Reset"
+    entity_category: config
+
