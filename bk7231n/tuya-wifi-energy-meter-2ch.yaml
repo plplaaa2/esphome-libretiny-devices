@@ -1,8 +1,7 @@
 substitutions:
   name: "energy-meter-2ch"
   comment: Tuya Energy Meter 2ch
-  s_led: GPIO4
-
+  
 esphome:
   name: ${name}
   comment: ${comment}
