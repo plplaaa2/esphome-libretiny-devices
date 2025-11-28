@@ -17,4 +17,4 @@ Tuya convert to the esphome
 
 **BK7231T**
 
-Tuya Smart Plug V1 (BL0942) 
+Tuya Wifi Smart Plug V1 (BL0942) 
