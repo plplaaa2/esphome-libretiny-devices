@@ -185,7 +185,7 @@ switch:
       mode: OUTPUT
       inverted: true
     name: "Battery check"
-    internal: false
+    internal: true
 
   - platform: template
     id: sleep_switch
