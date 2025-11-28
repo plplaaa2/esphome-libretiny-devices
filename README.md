@@ -11,6 +11,9 @@ Tuya convert to the esphome
  <br>
  Tuya Milfra 1, 2, 3Gang Wall Switch (no neutral)
  <br>
+ Tuya Wifi Energy Meter 2CH
+ <br>
+ Tuya Wifi Door Sensor(CB3S)
 
 **BK7231T**
 
