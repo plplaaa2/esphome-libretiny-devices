@@ -1,0 +1,248 @@
+substitutions:
+  name: "door-sensor-cb3s"
+  comment: "Door Sensor for CB3S"
+
+
+esphome:
+  name: ${name}
+  comment: ${comment}
+  project:
+    name: "esphome-craft.wifi"
+    version: "tuya.door-sensor"
+  on_boot:
+    priority: 600
+    then:
+      - switch.turn_on: batt_dv
+
+bk72xx:
+  board: cb3s
+  framework:
+    version: latest
+
+# Enable logging
+logger:
+ #baud_rate: 0
+
+debug:
+  update_interval: 5s
+  
+# Enable Home Assistant API
+api:
+  reboot_timeout: 0s
+  on_client_connected: 
+    then:
+      - component.update: VCC
+      - component.update: wifi_signal_db
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot in case wifi connection fails
+  ap:
+    ssid: "${name} Hotspot"
+
+# Make sure logging is not using the serial port
+
+external_components:
+  - source: github://Xmister/libretuya-esphome@deep-sleep
+    components: [deep_sleep]
+
+binary_sensor:
+  - platform: status
+    name: "Connection Status"    
+
+  - platform: gpio
+    name: "Door Sensor"
+    id: door_sensor
+    device_class: gas
+    pin: 
+      number: 8
+      inverted: true
+      mode: INPUT_PULLUP
+      allow_other_uses: true
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+    on_press:
+      then:        
+        - logger.log: "Door Opened!"
+        - light.turn_on: s_led
+        - delay: 0.5s
+        - light.turn_off: s_led
+        - wait_until: 
+            condition: 
+              - api.connected:
+        - if:
+            condition:
+              switch.is_on: sleep_switch
+            then:
+              - logger.log: "Deepsleep is On! Sleep!"
+              - script.execute: sleep_start
+            else: 
+              - logger.log: "Deepsleep is Off!"
+    on_release:
+      then:
+        - logger.log: "Door Closed!"
+
+  - platform: gpio
+    name: "Reset Button"
+    internal: True
+    pin: 
+      number: 7
+      mode: INPUT_PULLUP
+      inverted: true
+      allow_other_uses: true
+    on_click: 
+      then:
+        - switch.turn_off: sleep_switch
+        - light.turn_on: s_led
+        - delay: 0.5s
+        - light.turn_off: s_led
+        - logger.log: "Wakeup!"
+    on_double_click:
+      then:
+        - logger.log: "Sleep!"
+        - light.turn_on: s_led
+        - delay: 0.5s
+        - light.turn_off: s_led
+        - switch.turn_on: sleep_switch
+        - script.execute: sleep_start
+    on_multi_click:
+      - timing:
+        - ON for at least 5s   
+        - OFF for at least 0.5s
+        then:          
+          - logger.log: "Restart"
+          - button.press: re_start
+          
+
+sensor:
+   # 와이파이 신호 세기
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    internal: true
+    entity_category: "diagnostic"
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "Signal %"
+    entity_category: "diagnostic"
+    device_class: ""
+    icon: mdi:wifi
+
+  - platform: internal_temperature
+    name: 'Internal temperature'  
+
+  - platform: adc
+    name: "Battery Voltage"  
+    pin: P23
+    id: VCC
+    accuracy_decimals: 3
+    unit_of_measurement: "V"
+    icon: mdi:battery-medium
+    update_interval: never
+    filters:
+      - multiply: 2.4
+      - clamp:
+          min_value: 0.0
+          max_value: 3.2
+          #ignore_out_of_range: true
+    on_value:
+      then:
+        - component.update: battery_level
+
+  - platform: template
+    name: "Battery Level (%)"
+    unit_of_measurement: "%"
+    update_interval: never
+    id: battery_level
+    lambda: |-
+      float V = id(VCC).state;
+      float percent = ((V - 2.0f) / (3.2f - 2.0f)) * 100.0f;
+      return clamp(percent, 0.0f, 100.0f);
+    icon: mdi:battery
+    on_value:
+      - lambda: |-
+          if (!isnan(x)) {
+          id(batt_dv).turn_off();
+          }
+
+switch:
+  - platform: gpio    
+    id: batt_dv
+    pin: 
+      number: P14
+      mode: OUTPUT
+      inverted: true
+    name: "Battery check"
+    internal: false
+
+  - platform: template
+    id: sleep_switch
+    name: "Deep Sleep Mode"
+    optimistic: True
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      then:
+    turn_off_action: 
+      then:
+        - deep_sleep.prevent: d_sleep
+
+text_sensor:
+  - platform: version
+    name: "Esphome Version"    
+  - platform: wifi_info
+    ip_address:
+     name: Device IP Address
+  - platform: debug
+    reset_reason: 
+      name: Rest Reason
+
+light:
+  - platform: status_led
+    name: "Status LED"
+    internal: True
+    id: s_led
+    pin: 
+      number: P26
+      inverted: true
+
+button:    
+  - platform: restart
+    name: "Restart"
+    id: re_start
+    entity_category: diagnostic
+
+  - platform: template
+    name: "Manual Sleep"
+    id: sleep_button
+    on_press: 
+      then:
+        - script.execute: sleep_start
+
+deep_sleep:
+  id: d_sleep
+  sleep_duration: 24h
+  wakeup_pins:
+    - pin:
+        number: P7 
+        mode: INPUT_PULLUP
+        allow_other_uses: true
+      wakeup_pin_mode: INVERT_WAKEUP
+    - pin:
+        number: P8
+        mode: INPUT_PULLUP
+        allow_other_uses: true
+      wakeup_pin_mode: INVERT_WAKEUP 
+
+script:
+  - id: sleep_start
+    then:
+      - deep_sleep.enter: d_sleep
