@@ -123,7 +123,6 @@ binary_sensor:
           
 
 sensor:
-   # 와이파이 신호 세기
   - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
     name: "WiFi Signal dB"
     id: wifi_signal_db
