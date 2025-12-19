@@ -14,6 +14,8 @@ Tuya convert to the esphome
  Tuya Wifi Energy Meter 2CH
  <br>
  Tuya Wifi Door Sensor(CB3S)
+ <br>
+ Tuya Wifi Smart Plug V1 (BL0942) ver. 7231n 
 
 **BK7231T**
 
