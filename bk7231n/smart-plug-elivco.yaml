@@ -327,7 +327,7 @@ switch:
       - light.turn_off: power_led
   # Stanby Power Save
   - platform: template
-    name: "Save Standby Power"    
+    name: "Energy Saving Mode" 
     id: switch_save
     icon: mdi:toggle-switch
     restore_mode: RESTORE_DEFAULT_OFF
