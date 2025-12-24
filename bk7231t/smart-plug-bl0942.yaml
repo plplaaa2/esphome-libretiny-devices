@@ -1,8 +1,6 @@
 substitutions:  
   device_name: smart-plug-bl0942
   friendly_name: Smart Plug bl0942
-  s_ip: 192.168.x.x
-
 
 esphome:
   name: $device_name
@@ -22,7 +20,7 @@ esphome:
            - light.turn_on: 
               id: power_led
               brightness: 70%
-      - script.execute: power_save  # Start power saving logic
+
 bk72xx:
   board: generic-bk7231t-qfn32-tuya  
   framework:
@@ -71,6 +69,7 @@ wifi:
     password: !secret hotspot_pw
 
 captive_portal:
+safe_mode:
 
 uart:
   id: uart_bus
@@ -87,26 +86,11 @@ binary_sensor:
   - platform: status
     name: "API Connection"
     id: c_status
-    on_release:
-      then:
-        - if:
-              condition:
-                for:
-                  time: 60s
-                  condition:
-                    - binary_sensor.is_off: c_status
-              then:
-                - button.press: re_start
+
   - platform: template
     id: warning
     name: 'Overload Warning'
     device_class: problem
-    lambda: |-
-     if ((id(current).state >= 18) or (id(in_temp).state >= 70)){
-     return true;
-     } else {
-     return false;
-     }
   
   # Button on the front is pressed and then toggle relay           
   - platform: gpio
@@ -284,10 +268,11 @@ sensor:
 
 number:
   - platform: template
-    name: "Set Stanby W"
+    name: "Standby Cutoff"
     id: set_num
     optimistic: true
     restore_mode: true
+    entity_category: config
     icon: mdi:numeric
     min_value: 0
     max_value: 100
@@ -348,11 +333,12 @@ switch:
       - light.turn_off: power_led
   # Stanby Power Save
   - platform: template
-    name: "Save Standby Power"    
+    name: "Energy Saving Mode" 
     id: switch_save
     icon: mdi:toggle-switch
     restore_mode: RESTORE_DEFAULT_OFF
     optimistic: true
+    entity_category: config
     on_turn_on:    
       - script.execute: power_save
     on_turn_off: 
@@ -364,6 +350,7 @@ switch:
     restore_mode: RESTORE_DEFAULT_ON
     icon: mdi:toggle-switch
     optimistic: true
+    entity_category: config
 
   - platform: safe_mode
     internal: true
