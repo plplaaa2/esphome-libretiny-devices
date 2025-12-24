@@ -28,13 +28,14 @@ wifi:
   password: !secret wifi_password
   power_save_mode: HIGH
   fast_connect: True
-  #output_power: 8.5dB
-  
+
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
     ssid: "${name} Hotspot"
 
 captive_portal:
+
+safe_mode:
 
 tuya:  
   time_id: kr_time
