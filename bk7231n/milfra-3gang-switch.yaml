@@ -39,6 +39,8 @@ wifi:
 
 captive_portal:
 
+safe_mode:
+
 time:
   - platform: homeassistant
     id: homeassistant_time
@@ -50,16 +52,6 @@ binary_sensor:
     on_press:
       then:
         - light.turn_off: power_led
-    on_release:
-      then:
-        - if:
-              condition:
-                for:
-                  time: 60s
-                  condition:
-                    - binary_sensor.is_off: c_status
-              then:
-                - button.press: re_start
   # Button on the front is pressed and then toggle relay
   - platform: gpio
     device_class: power
