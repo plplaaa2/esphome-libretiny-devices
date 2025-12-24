@@ -1,13 +1,11 @@
 substitutions:
-  voltage_divider: "801.10"
+  voltage_divider: "791.4"
   current_resistor: "0.001"
-  current_multiply: "0.43"
+  current_multiply: "0.42"
 
 esphome:
   name: smart-plug-elivco
   friendly_name: Smart Plug Elivco
-  #platformio_options:
-    #board_build.f_cpu: 60000000L
   on_boot:
     priority: 600
     then:       
@@ -38,12 +36,6 @@ wifi:
   password: !secret wifi_password  
   power_save_mode: HIGH
   fast_connect: true
-  manual_ip: 
-   static_ip: 'your ip'
-   gateway: 'your gate way'
-   subnet: 255.255.255.0
-   dns1: 'your dns1'
-   dns2: 'your dns2'
 
   # Enable fallback hotspot in case wifi connection fails
   ap:
@@ -51,8 +43,8 @@ wifi:
     password: !secret hotspot_pw
 
 captive_portal:
-web_server:
 
+safe_mode:
 
 time:
   - platform: homeassistant
@@ -62,34 +54,11 @@ binary_sensor:
   - platform: status
     name: "Connection Status"
     id: c_status
-    on_press:
-      then:
-        - light.turn_off: wifi_led
-    on_release:
-      then:
-        - if:
-            condition:
-              for:
-                time: 120s
-                condition:
-                  - binary_sensor.is_off: c_status
-            then:
-              - button.press: re_start
+
   - platform: template
     id: warning
     name: Overload Warning
     device_class: problem
-    lambda: |-
-     if ((id(current).state >= 18) or (id(in_temp).state >= 70)) {
-     return true;
-     } else {
-     return false;
-     }
-    on_press:
-      then:
-        - delay: 5s
-        - lambda: id(warning).publish_state(false);
-
       
   # Button on the front is pressed and then toggle relay     
   - platform: gpio
@@ -184,10 +153,14 @@ sensor:
   - platform: template
     name: "Power Factor"
     unit_of_measurement: "%"
+    device_class: power_factor
     accuracy_decimals: 2
-    lambda: return id(power).state / (id(current).state * id(voltage).state);
-    filters:
-      multiply: 100
+    lambda: |-
+      float pf = id(power).state / (id(current).state * id(voltage).state);
+      if (pf > 1.0) pf = 1.0;   
+      if (pf < 0.0) pf = 0.0;   
+      return pf * 100; 
+    update_interval: 5s
 
   - platform: internal_temperature
     name: "Internal Temperature"
@@ -207,6 +180,7 @@ sensor:
     
   - platform: hlw8012
     model: BL0937
+    change_mode_every: 8
     current_resistor: ${current_resistor}
     voltage_divider: ${voltage_divider}
     sel_pin:
@@ -223,6 +197,7 @@ sensor:
       id: current
       icon: mdi:current-ac
       filters:
+        - delta: 0.1
         - multiply: ${current_multiply}
         #- lambda: return x * 0.443548;
       unit_of_measurement: A
@@ -267,25 +242,35 @@ sensor:
     voltage:
       name: "Voltage"
       id: voltage
-      #filters:        
-       # - lambda: return x / 3;
+      filters:
+        - median
+        - delta: 2
     power:
       name: "Power"
       id: power
       accuracy_decimals: 2
-      #filters:
-        #- lambda: return x / 3;      
-    update_interval: 3s 
+      filters:
+        - delta: 0.5
+      on_value:
+        then:
+          if:
+            condition:
+              lambda: return x <= id(set_num).state;
+            then:
+              - script.execute: power_save
+    update_interval: 3s
 
 number:
   - platform: template
-    name: "Set Stanby W"
+    name: "Standby Cutoff"
     id: set_num
     optimistic: true
     icon: mdi:numeric
     min_value: 0
     max_value: 100
     unit_of_measurement: W
+    restore_value: True    
+    entity_category: config
     step: 5
 
 text_sensor:
@@ -346,6 +331,7 @@ switch:
     id: switch_save
     icon: mdi:toggle-switch
     restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
     optimistic: true
     # Overload Protect
   - platform: template
@@ -353,6 +339,7 @@ switch:
     id: switch_olp
     restore_mode: RESTORE_DEFAULT_ON
     icon: mdi:toggle-switch
+    entity_category: config
     optimistic: true
 
 lock:  
@@ -360,20 +347,20 @@ lock:
     name:  Child's Lock
     id: child_lock
     optimistic: true
+    entity_category: config
 
 script:
   - id: power_save
-    mode: restart
     then:
       - if:
           condition:
-            for:
-              time: 300s
-              condition:
-                and:              
-                  - switch.is_on: relay
-                  - switch.is_on: switch_save
-                  - lambda: return (id(power).state <= id(set_num).state );
+           and:
+             - switch.is_on: relay
+             - switch.is_on: switch_save
+             - for:
+                 time: 300s
+                 condition:
+                   - lambda: return (id(power).state <= id(set_num).state );
           then: 
             - switch.turn_off: relay
   - id: led_restore
