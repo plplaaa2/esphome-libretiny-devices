@@ -8,12 +8,7 @@ esphome:
   project:
     name: "esphome-craft.wifi"
     version: "tuya.energy-meter.2ch"
-  on_boot: 
-    then:
-      - lambda: |-
-          auto call = id(interval).make_call();
-          call.set_value(id(interval_time));
-          call.perform();
+
 bk72xx:
   board: cb2s
 
@@ -80,8 +75,8 @@ text_sensor:
     icon: mdi:directions
     filters:
       - map:
-        - "0 -> Forward"
-        - "1 -> Reverse"
+        - "0 -> Forward"  # or Grid
+        - "1 -> Reverse"  # or solar, wind, etc
 
   - platform: "tuya"
     name: "Direction B"
