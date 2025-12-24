@@ -7,8 +7,6 @@ Tuya convert to the esphome
 
 **BK7231N**
 
- Tuay Wifi Smart Plug 20A (Elivco EU socket)
- <br>
  Tuya Milfra 1, 2, 3Gang Wall Switch (no neutral)
  <br>
  Tuya Wifi Energy Meter 2CH
@@ -16,6 +14,11 @@ Tuya convert to the esphome
  Tuya Wifi Door Sensor(CB3S)
  <br>
  Tuya Wifi Smart Plug V1 (BL0942) ver. 7231n 
+ <br>
+ Tuay Wifi Smart Plug 20A (Elivco EU socket)
+ <br>
+ Tuay Wifi Smart Dual Plug 20A
+ <br>
 
 **BK7231T**
 
