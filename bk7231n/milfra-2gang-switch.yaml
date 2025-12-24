@@ -26,11 +26,6 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
   power_save_mode: HIGH
-  #fast_connect: True
-  #manual_ip: 
-   #static_ip: 192.168.x.x
-   #gateway: 192.168.x.x   
-   #subnet: 255.255.255.x  
 
   # Enable fallback hotspot in case wifi connection fails
   ap:
@@ -38,6 +33,7 @@ wifi:
     password: !secret hotspot_pw
 
 captive_portal:
+safe_mode:
 
 time:
   - platform: homeassistant
@@ -50,17 +46,6 @@ binary_sensor:
     on_press:
       then:
         - light.turn_off: power_led
-    on_release:
-      then:
-        - if:
-              condition:
-                for:
-                  time: 60s
-                  condition:
-                    - binary_sensor.is_off: c_status
-              then:
-                - button.press: re_start
-  # Button on the front is pressed and then toggle relay
 
   - platform: gpio
     device_class: power
