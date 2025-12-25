@@ -251,13 +251,6 @@ sensor:
       accuracy_decimals: 2
       filters:
         - delta: 0.5
-      on_value:
-        then:
-          if:
-            condition:
-              lambda: return x <= id(set_num).state;
-            then:
-              - script.execute: power_save
     update_interval: 3s
 
 number:
@@ -320,9 +313,13 @@ switch:
     pin: GPIO26
     id: relay
     icon: mdi:power-socket-de
+    device_class: outlet
     restore_mode: RESTORE_DEFAULT_OFF
     on_turn_on:
-      - light.turn_on: power_led          
+      - light.turn_on: 
+         id: power_led
+         effect: "Slow Pulse"
+      - script.execute: power_save
     on_turn_off:
       - light.turn_off: power_led
   # Stanby Power Save
@@ -357,11 +354,13 @@ script:
            and:
              - switch.is_on: relay
              - switch.is_on: switch_save
-             - for:
-                 time: 300s
-                 condition:
-                   - lambda: return (id(power).state <= id(set_num).state );
           then: 
+            - delay: 300s
+            - wait_until:
+                condition:
+                  - lambda: return (id(power).state <= id(set_num).state );
+            - lambda: |-
+                ESP_LOGI("main", "Relay OFF: power=%.2f, set_num=%.2f", id(power).state, id(set_num).state);
             - switch.turn_off: relay
   - id: led_restore
     mode: restart
