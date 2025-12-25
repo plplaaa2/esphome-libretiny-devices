@@ -447,9 +447,11 @@ script:
                  - switch.is_on: relay_1
                  - switch.is_on: relay_2
              - switch.is_on: switch_save
-             - for:
-                 time: 300s
-                 condition:
-                   - lambda: return (id(power).state <= id(set_num).state );
           then: 
+            - delay: 300s
+            - wait_until:
+                condition:
+                  - lambda: return (id(power).state <= id(set_num).state );
+            - lambda: |-
+                ESP_LOGI("main", "Relay OFF: power=%.2f, set_num=%.2f", id(power).state, id(set_num).state);
             - switch.turn_off: all_socket
