@@ -323,13 +323,6 @@ sensor:
       accuracy_decimals: 1 
       filters:
         - delta: 0.5
-      on_value:
-        then:
-          if:
-            condition:
-              lambda: return x <= id(set_num).state;
-            then:
-              - script.execute: power_save
     update_interval: 1s
 
 number:
@@ -378,7 +371,7 @@ button:
         
     
 switch:
-  # Relay itself
+# Relay itself
   - platform: gpio
     name: "Socket 1"
     pin: GPIO24
@@ -386,6 +379,9 @@ switch:
     icon: mdi:power-socket-de
     device_class: outlet
     restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      then:
+        - script.execute: power_save
 
   - platform: gpio
     name: "Socket 2"
@@ -394,6 +390,9 @@ switch:
     icon: mdi:power-socket-de
     device_class: outlet
     restore_mode: RESTORE_DEFAULT_OFF 
+    on_turn_on:
+      then:
+        - script.execute: power_save
 
   # Overload Protect
   - platform: template
