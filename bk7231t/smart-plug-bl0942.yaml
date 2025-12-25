@@ -257,9 +257,6 @@ sensor:
       name: 'Power'
       id: power
       accuracy_decimals: 1
-      on_value:
-        then:
-          - script.execute: power_save
     frequency:
       name: "Frequency"
       accuracy_decimals: 1
@@ -366,18 +363,19 @@ lock:
 
 script:
   - id: power_save
-    mode: restart
     then:
       - if:
           condition:
-            for:
-              time: 300s
-              condition:
-                and:              
-                  - switch.is_on: relay
-                  - switch.is_on: switch_save
-                  - lambda: return (id(power).state <= id(set_num).state );
+           and:
+             - switch.is_on: relay
+             - switch.is_on: switch_save
           then: 
+            - delay: 300s
+            - wait_until:
+                condition:
+                  - lambda: return (id(power).state <= id(set_num).state );
+            - lambda: |-
+                ESP_LOGI("main", "Relay OFF: power=%.2f, set_num=%.2f", id(power).state, id(set_num).state);
             - switch.turn_off: relay
   - id: led_restore
     mode: restart
