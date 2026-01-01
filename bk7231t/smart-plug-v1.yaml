@@ -1,6 +1,6 @@
 substitutions:  
-  device_name: smart-plug-bl0942
-  friendly_name: Smart Plug bl0942
+  device_name: smart-plug-v1
+  friendly_name: Smart Plug V1
 
 esphome:
   name: $device_name
