@@ -1,0 +1,387 @@
+substitutions:
+  name: "smoke-sensor"
+  comment: "Smoke Sensor CBU"
+
+esphome:
+  name: ${name}
+  comment: ${comment}
+  project:
+    name: "Tuya.Smoke-Sensor"
+    version: "Wifi.ESPhome-Craft"
+  on_boot:
+    priority: 600
+    then:
+      - switch.turn_on: batt_dv
+      - if:
+          condition:
+            or:
+              - binary_sensor.is_on: back_button
+              - binary_sensor.is_on: smoke_sensor
+          then:
+            - switch.turn_off: sleep_switch
+
+bk72xx:
+  board: cbu
+  framework:
+    version: latest
+
+# Enable logging
+logger:
+  level: DEBUG
+ #baud_rate: 0
+
+debug:
+  update_interval: 5s
+  
+# Enable Home Assistant API
+api:
+  reboot_timeout: 0s
+  on_client_connected: 
+    then:
+      - component.update: VCC
+      - component.update: wifi_signal_db
+      - wait_until: 
+          condition:
+            and:
+              - binary_sensor.is_on: connection
+              - lambda: 'return id(smoke_sensor).state == true || id(smoke_sensor).state == false;'
+          timeout: 5s
+      - if:
+          condition: 
+            and:
+              - binary_sensor.is_off: back_button
+              - binary_sensor.is_off: smoke_sensor
+          then:
+            - script.execute: sleep_start
+          else: 
+            - script.execute: sleep_check
+
+ota:
+  - platform: esphome    
+    on_begin:
+      then:
+        - deep_sleep.prevent: d_sleep
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: HIGH  
+  fast_connect: True
+  #output_power: 8.5dB  
+  reboot_timeout: 0s
+  # Enable fallback hotspot in case wifi connection fails
+  ap:
+    ssid: "${name} Hotspot"
+
+# Make sure logging is not using the serial port
+
+captive_portal:
+
+time:
+  - platform: sntp
+    id: time_comp
+    timezone: Asia/Seoul
+
+binary_sensor:
+  - platform: status
+    name: "Connection Status"    
+  - platform: homeassistant
+    entity_id: binary_sensor.smoke_sensor_connection_status
+    id: connection
+
+  - platform: gpio
+    name: "Tamper"
+    id: back_button
+    device_class: tamper
+    pin: 
+      number: 9
+      mode: INPUT_PULLUP
+      #inverted: true
+      allow_other_uses: true
+    filters: 
+      - delayed_on: 1s
+      - delayed_off: 3s
+    on_press:
+      - logger.log: "Tamper alert!"
+      - wait_until: 
+          condition: 
+            - api.connected:
+      - script.execute: battery_sleep
+    on_release:
+      then:
+        - logger.log: "Tamper cleared"
+        - light.turn_on: s_led
+        - delay: 0.5s
+        - light.turn_off: s_led
+        - switch.turn_on: sleep_switch
+        - script.execute: sleep_check
+
+  - platform: gpio
+    name: "Smoke Sensor"
+    id: smoke_sensor
+    device_class: smoke
+    pin: 
+      number: 15
+      mode: INPUT_PULLUP
+      allow_other_uses: true
+    filters: 
+      - delayed_off: 5s
+    on_press:
+      - switch.turn_off: sleep_switch
+      - switch.turn_on: smoke_switch      
+      - logger.log: "Smoke Detected!"
+      - script.execute: battery_sleep
+    on_release:
+      then:
+        - light.turn_on: s_led
+        - delay: 0.5s
+        - light.turn_off: s_led
+        - switch.turn_off: smoke_switch
+        - logger.log: "Smoke Cleared!"
+        - switch.turn_on: sleep_switch
+        - script.execute: sleep_check
+
+  - platform: gpio
+    name: "Reset Button"
+    internal: True
+    pin: 
+      number: 28
+      mode: INPUT
+      inverted: true
+      allow_other_uses: true
+    on_click: 
+      then:
+        - logger.log: "Wakeup!"
+        - wait_until: 
+            condition: 
+              - api.connected:
+        - script.execute: battery_sleep
+    on_double_click:
+      then:
+        - logger.log: "Sleep!"
+        - light.turn_on: s_led
+        - delay: 0.5s
+        - light.turn_off: s_led
+        - switch.turn_on: sleep_switch
+        - script.execute: sleep_start
+
+    on_multi_click:
+      - timing:
+        - ON for at least 5s   
+        - OFF for at least 0.5s
+        then:          
+          - switch.turn_off: sleep_switch
+          - logger.log: "Deepsleep is off"
+          - repeat:
+              count: 3
+              then:
+                - light.turn_on: s_led
+                - delay: 0.3s
+                - light.turn_off: s_led
+                - delay: 0.3s
+
+
+
+sensor:
+   # 와이파이 신호 세기
+  - platform: wifi_signal # Reports the WiFi signal strength/RSSI in dB
+    name: "WiFi Signal dB"
+    id: wifi_signal_db
+    internal: true
+    entity_category: "diagnostic"
+
+  - platform: copy # Reports the WiFi signal strength in %
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "Signal %"
+    entity_category: "diagnostic"
+    device_class: ""
+    icon: mdi:wifi
+
+  - platform: internal_temperature
+    name: 'Internal temperature'    
+
+  - platform: adc
+    name: "Battery Voltage"  
+    pin: P23
+    id: VCC
+    accuracy_decimals: 3
+    unit_of_measurement: "V"
+    icon: mdi:battery-medium
+    update_interval: never
+    filters:
+      - multiply: 2.4
+      - clamp:
+          min_value: 0.0
+          max_value: 3.2
+          #ignore_out_of_range: true
+    on_value:
+      then:
+        - component.update: battery_level
+
+  - platform: template
+    name: "Battery Level (%)"
+    unit_of_measurement: "%"
+    update_interval: never
+    id: battery_level
+    lambda: |-
+      float V = id(VCC).state;
+      float percent = ((V - 2.0f) / (3.2f - 2.0f)) * 100.0f;
+      return clamp(percent, 0.0f, 100.0f);
+    icon: mdi:battery
+    on_value:
+      - lambda: |-
+          if (!isnan(x)) {
+          id(batt_dv).turn_off();
+          }
+
+switch:
+  - platform: gpio    
+    id: batt_dv
+    pin: 
+      number: P26
+      mode: OUTPUT
+      inverted: true
+    name: "Battery check"
+    internal: True
+  - platform: template    
+    id: smoke_switch
+    optimistic: True
+    restore_mode: RESTORE_DEFAULT_OFF   
+    turn_on_action: 
+      then:
+        - lambda: id(smoke_sensor).publish_state(true);
+    turn_off_action: 
+      then:
+        - lambda: id(smoke_sensor).publish_state(false);
+
+  - platform: template
+    id: sleep_switch
+    name: "Deep Sleep Mode"
+    optimistic: True
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      then:
+        - deep_sleep.allow: d_sleep
+    turn_off_action: 
+      then:
+        - deep_sleep.prevent: d_sleep
+
+text_sensor:
+  - platform: version
+    name: "Esphome Version"    
+  - platform: wifi_info
+    ip_address:
+     name: Device IP Address
+  - platform: debug
+    reset_reason: 
+      name: Rest Reason
+
+light:
+  - platform: status_led
+    name: "Status LED"
+    internal: True
+    id: s_led
+    pin: P17
+
+button:    
+  - platform: restart
+    name: "Restart"
+    id: re_start
+    entity_category: diagnostic
+  - platform: template
+    name: "Manual Sleep"
+    id: sleep_button
+    on_press: 
+      then:
+        - switch.turn_on: sleep_switch
+        - script.execute: sleep_start
+
+deep_sleep:
+  id: d_sleep
+  #run_duration: 15s
+  sleep_duration: 24h
+  wakeup_pin:
+    - pin:
+        number: 9 
+        mode: 
+          input: true
+          #pullup: true
+        #inverted: true
+        allow_other_uses: true
+      #wakeup_pin_mode: INVERT_WAKEUP
+    - pin:
+        number: 15 
+        mode: INPUT_PULLDOWN
+        allow_other_uses: true
+      #wakeup_pin_mode: KEEP_AWAKE
+    - pin: 
+        number: 28
+        mode: 
+          input: true
+          pullup: true
+        inverted: true
+        allow_other_uses: true
+      wakeup_pin_mode: INVERT_WAKEUP
+
+script:
+  - id: sleep_start
+    then:
+      - wait_until: 
+          condition:
+            or:
+              - lambda: 'return id(smoke_sensor).state == true;'
+              - lambda: 'return id(smoke_sensor).state == false;'
+          timeout: 5s
+      - logger.log: "Sleep Start"
+      - delay: 500ms
+      - if: 
+          condition:
+            - switch.is_on: sleep_switch
+          then:
+            - logger.log: "Deepsleep is On! Sleep!"
+            - deep_sleep.enter: d_sleep
+          else:
+            - logger.log: "Deepsleep is Off!"
+
+  - id: sleep_check
+    mode: restart
+    then:
+      - wait_until: 
+          condition:
+            and:
+             - lambda: 'return id(back_button).state == false;'
+             - lambda: 'return id(smoke_sensor).state == false;'
+      - logger.log: "All Cleared! Sleep!"
+      - if: 
+          condition:
+            - switch.is_on: sleep_switch
+          then:
+            - logger.log: "Deepsleep is On! Sleep!"
+            - deep_sleep.enter: d_sleep
+          else:
+            - logger.log: "Deepsleep is Off!"
+
+  - id: battery_sleep
+    then:
+      - if:
+          condition:
+            - lambda: return id(battery_level).state >= 50;
+          then:
+            - logger.log: "Battery is High"
+            - wait_until: 
+                condition:
+                  - lambda: return id(battery_level).state <= 50;
+            - logger.log: "Sleep Start"       
+            - delay: 300ms
+            - deep_sleep.enter: d_sleep
+
+          else:
+            - logger.log: "Battery is Low"
+            - delay: 10min
+            - logger.log: "Sleep Start"
+            - delay: 300ms
+            - deep_sleep.enter: d_sleep
+
