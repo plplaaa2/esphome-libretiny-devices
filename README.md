@@ -23,3 +23,7 @@ Tuya convert to the esphome
 **BK7231T**
 
 Tuya Wifi Smart Plug V1 (BL0942) 
+
+
+## 후원
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/plplaaa2)
